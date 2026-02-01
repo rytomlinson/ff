@@ -1,0 +1,19 @@
+{
+  "name": "ff-monorepo",
+  "private": true,
+  "workspaces": [
+    "common",
+    "data-service",
+    "ui"
+  ],
+  "scripts": {
+    "dev:data-service": "npm run dev -w data-service",
+    "dev:ui": "npm run dev -w ui",
+    "build": "npm run build -w common && npm run build -w data-service && npm run build -w ui",
+    "migrate": "npm run migrate -w data-service",
+    "migrate:create": "npm run migrate:create -w data-service"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
