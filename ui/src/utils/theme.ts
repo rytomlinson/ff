@@ -7,6 +7,7 @@ export interface PathTheme {
     };
     accent: {
       primary: string;
+      secondary: string;
       hover: string;
       active: string;
     };
@@ -53,26 +54,27 @@ export interface PathTheme {
   };
 }
 
-export const darkTheme: PathTheme = {
+export const lightTheme: PathTheme = {
   colors: {
     background: {
-      primary: '#1a1a1a',
-      secondary: '#2a2a2a',
-      tertiary: '#333333',
+      primary: '#FFFFFF',
+      secondary: '#F5F7F9',
+      tertiary: '#EDF1F5',
     },
     accent: {
-      primary: '#FF6B00',
-      hover: '#FF8533',
-      active: '#CC5500',
+      primary: '#4A7C8A',    // Steel teal - like a fish scale
+      secondary: '#5A8F9E',
+      hover: '#5A8F9E',
+      active: '#3A6570',
     },
     text: {
-      primary: '#FFFFFF',
-      secondary: '#CCCCCC',
-      muted: '#888888',
+      primary: '#1A2B33',
+      secondary: '#4A5D68',
+      muted: '#7A8D98',
     },
     border: {
-      primary: '#444444',
-      secondary: '#555555',
+      primary: '#D1DBE1',
+      secondary: '#B8C7D0',
     },
     status: {
       success: '#22C55E',

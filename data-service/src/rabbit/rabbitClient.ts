@@ -1,7 +1,7 @@
-import amqp, { type Connection, type Channel } from 'amqplib';
+import amqp from 'amqplib';
 
-let connection: Connection | null = null;
-let channel: Channel | null = null;
+let connection: amqp.ChannelModel | null = null;
+let channel: amqp.Channel | null = null;
 
 const EXCHANGE_NAME = 'ff_events';
 const RABBITMQ_URL = process.env['RABBITMQ_URL'] ?? 'amqp://localhost:5672';
@@ -27,7 +27,7 @@ export async function closeRabbitMQ(): Promise<void> {
   }
 }
 
-export async function publishProjectEvent(
+export async function publishFishingTripEvent(
   routingKey: string,
   data: unknown
 ): Promise<void> {
@@ -44,7 +44,7 @@ export async function publishProjectEvent(
   });
 }
 
-export async function subscribeToProjectEvents(
+export async function subscribeToFishingTripEvents(
   pattern: string,
   handler: (routingKey: string, data: unknown) => void
 ): Promise<void> {

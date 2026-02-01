@@ -1,1 +1,1 @@
-export { projectActions, projectSelectors, projectReducer } from './projectSlice.js';
+export { fishingTripActions, fishingTripSelectors, fishingTripReducer } from './fishingTripSlice.js';

@@ -12,7 +12,9 @@
       "@ff/common": ["../common/src/index.ts"],
       "@ff/common/*": ["../common/src/*"]
     },
-    "noEmit": true
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],

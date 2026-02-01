@@ -32,7 +32,7 @@ export async function createContext({
   };
 }
 
-interface Meta {
+export interface Meta {
   log?: boolean;
 }
 

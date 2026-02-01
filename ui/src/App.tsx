@@ -1,7 +1,8 @@
 import { createUseStyles, ThemeProvider } from 'react-jss';
-import { darkTheme, type PathTheme } from './utils/theme.js';
+import { lightTheme, type PathTheme } from './utils/theme.js';
 import Map from './components/Map/Map.js';
-import ProjectList from './components/ProjectList/ProjectList.js';
+import TripList from './components/TripList/TripList.js';
+import TripForm from './components/TripForm/TripForm.js';
 import { useWebSocket } from './hooks/index.js';
 
 const useStyles = createUseStyles<string, object, PathTheme>((theme) => ({
@@ -57,20 +58,21 @@ function AppContent() {
   };
 
   return (
-    <div className={classes.container}>
-      <div className={classes.sidebar}>
-        <ProjectList />
+    <div className={classes['container']}>
+      <div className={classes['sidebar']}>
+        <TripList />
       </div>
-      <div className={classes.main}>
+      <div className={classes['main']}>
         <Map onMapClick={handleMapClick} />
       </div>
+      <TripForm />
     </div>
   );
 }
 
 export default function App() {
   return (
-    <ThemeProvider theme={darkTheme}>
+    <ThemeProvider theme={lightTheme}>
       <AppContent />
     </ThemeProvider>
   );

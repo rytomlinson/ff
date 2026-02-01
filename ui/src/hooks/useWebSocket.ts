@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAppDispatch } from './useAppDispatch.js';
-import { projectActions } from '../slices/projectSlice.js';
-import type { Project } from '@ff/common/schemas/projectSchema.js';
+import { fishingTripActions } from '../slices/fishingTripSlice.js';
+import type { FishingTrip } from '@ff/common/schemas/fishingTripSchema.js';
 
 interface WsMessage {
   type: string;
@@ -26,12 +26,12 @@ export function useWebSocket() {
         const message = JSON.parse(event.data as string) as WsMessage;
 
         switch (message.type) {
-          case 'project.created':
-          case 'project.updated':
-            dispatch(projectActions.upsertItem(message.data as Project));
+          case 'fishingTrip.created':
+          case 'fishingTrip.updated':
+            dispatch(fishingTripActions.upsertItem(message.data as FishingTrip));
             break;
-          case 'project.deleted':
-            dispatch(projectActions.deleteItem((message.data as { id: string }).id));
+          case 'fishingTrip.deleted':
+            dispatch(fishingTripActions.deleteItem((message.data as { id: string }).id));
             break;
         }
       } catch (e) {

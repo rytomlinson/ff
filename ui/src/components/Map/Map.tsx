@@ -4,8 +4,8 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { createUseStyles } from 'react-jss';
 import type { PathTheme } from '../../utils/theme.js';
 import { useAppSelector, useAppDispatch } from '../../hooks/index.js';
-import { projectSelectors, projectActions } from '../../slices/projectSlice.js';
-import type { Project } from '@ff/common/schemas/projectSchema.js';
+import { fishingTripSelectors, fishingTripActions } from '../../slices/fishingTripSlice.js';
+import type { FishingTrip } from '@ff/common/schemas/fishingTripSchema.js';
 
 const useStyles = createUseStyles<string, object, PathTheme>((theme) => ({
   container: {
@@ -17,18 +17,19 @@ const useStyles = createUseStyles<string, object, PathTheme>((theme) => ({
     width: '100%',
     height: '100%',
   },
-  coordinates: {
+  clickHint: {
     position: 'absolute',
-    bottom: theme.spacing.md,
-    left: theme.spacing.md,
+    top: theme.spacing.md,
+    left: '50%',
+    transform: 'translateX(-50%)',
     backgroundColor: theme.colors.background.secondary,
     color: theme.colors.text.secondary,
-    padding: `${theme.spacing.xs}px ${theme.spacing.sm}px`,
-    borderRadius: theme.borderRadius.sm,
-    fontSize: theme.fontSize.xs,
-    fontFamily: 'monospace',
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    borderRadius: theme.borderRadius.md,
+    fontSize: theme.fontSize.sm,
     border: `1px solid ${theme.colors.border.primary}`,
     zIndex: 1,
+    pointerEvents: 'none',
   },
 }));
 
@@ -38,33 +39,40 @@ interface MapProps {
   onMapClick?: (lng: number, lat: number) => void;
 }
 
-const MAPTILER_KEY = 'get_your_own_key'; // Replace with your MapTiler key
-const STYLE_URL = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
+// Free OpenStreetMap-based style (no API key required)
+const STYLE_URL = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+
+function formatDate(date: Date | string): string {
+  const d = new Date(date);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 export default function Map({
-  initialCenter = [-122.4194, 37.7749],
-  initialZoom = 10,
+  initialCenter = [-105.0, 39.5],
+  initialZoom = 7,
   onMapClick,
 }: MapProps) {
   const classes = useStyles();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const markersRef = useRef<globalThis.Map<string, maplibregl.Marker>>(new globalThis.Map());
 
   const dispatch = useAppDispatch();
-  const projects = useAppSelector(projectSelectors.selectItemsArray);
-  const selectedId = useAppSelector(projectSelectors.selectSelectedId);
+  const trips = useAppSelector(fishingTripSelectors.selectItemsArray);
+  const selectedId = useAppSelector(fishingTripSelectors.selectSelectedId);
 
   const handleMapClick = useCallback(
     (e: MapMouseEvent) => {
+      // Open form with clicked coordinates
+      dispatch(fishingTripActions.openForm({ lat: e.lngLat.lat, lng: e.lngLat.lng }));
       onMapClick?.(e.lngLat.lng, e.lngLat.lat);
     },
-    [onMapClick]
+    [onMapClick, dispatch]
   );
 
-  const handleProjectClick = useCallback(
-    (projectId: string) => {
-      dispatch(projectActions.setSelectedId(projectId));
+  const handleTripClick = useCallback(
+    (tripId: string) => {
+      dispatch(fishingTripActions.setSelectedId(tripId));
     },
     [dispatch]
   );
@@ -80,8 +88,8 @@ export default function Map({
       zoom: initialZoom,
     });
 
-    map.addControl(new maplibregl.NavigationControl(), 'top-right');
-    map.addControl(new maplibregl.ScaleControl(), 'bottom-right');
+    map.addControl(new maplibregl.NavigationControl({}), 'top-right');
+    map.addControl(new maplibregl.ScaleControl({}), 'bottom-right');
 
     map.on('click', handleMapClick);
 
@@ -93,84 +101,107 @@ export default function Map({
     };
   }, [initialCenter, initialZoom, handleMapClick]);
 
-  // Update markers when projects change
+  // Update markers when trips change
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     const currentMarkers = markersRef.current;
-    const projectIds = new Set(projects.map((p) => p.id));
+    const tripIds = new Set(trips.map((t) => t.id));
 
-    // Remove markers for deleted projects
+    // Remove markers for deleted trips
     currentMarkers.forEach((marker, id) => {
-      if (!projectIds.has(id)) {
+      if (!tripIds.has(id)) {
         marker.remove();
         currentMarkers.delete(id);
       }
     });
 
-    // Add or update markers for current projects
-    projects.forEach((project: Project) => {
-      let marker = currentMarkers.get(project.id);
+    // Add or update markers for current trips
+    trips.forEach((trip: FishingTrip) => {
+      let marker = currentMarkers.get(trip.id);
 
       if (!marker) {
+        // Create fish-themed marker
         const el = document.createElement('div');
-        el.className = 'project-marker';
+        el.className = 'fishing-trip-marker';
+        el.innerHTML = '🐟';
         el.style.cssText = `
-          width: 20px;
-          height: 20px;
-          background-color: #FF6B00;
-          border: 2px solid white;
-          border-radius: 50%;
+          font-size: 24px;
           cursor: pointer;
           transition: transform 0.2s ease;
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
         `;
         el.addEventListener('mouseenter', () => {
-          el.style.transform = 'scale(1.2)';
+          el.style.transform = 'scale(1.3)';
         });
         el.addEventListener('mouseleave', () => {
-          el.style.transform = 'scale(1)';
+          if (trip.id !== selectedId) {
+            el.style.transform = 'scale(1)';
+          }
         });
         el.addEventListener('click', (e) => {
           e.stopPropagation();
-          handleProjectClick(project.id);
+          handleTripClick(trip.id);
         });
 
+        // Create popup with trip info
+        const popupContent = `
+          <div style="padding: 8px; min-width: 150px; color: #1A2B33;">
+            <div style="font-weight: 600; margin-bottom: 4px;">${trip.locationName}</div>
+            <div style="font-size: 12px; color: #4A5D68; margin-bottom: 4px;">${formatDate(trip.date)}</div>
+            <div style="display: flex; gap: 8px; font-size: 12px; color: #4A5D68;">
+              <span>🐟 ${trip.catchCount ?? 0} fish</span>
+              ${trip.weather ? `<span>| ${trip.weather}</span>` : ''}
+            </div>
+            ${trip.notes ? `<div style="font-size: 11px; color: #7A8D98; margin-top: 4px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${trip.notes}</div>` : ''}
+          </div>
+        `;
+
         marker = new maplibregl.Marker({ element: el })
-          .setLngLat([project.longitude, project.latitude])
+          .setLngLat([trip.longitude, trip.latitude])
           .setPopup(
-            new maplibregl.Popup({ offset: 25 }).setHTML(
-              `<strong>${project.name}</strong><br/>${project.description ?? ''}`
-            )
+            new maplibregl.Popup({ offset: 25, closeButton: false }).setHTML(popupContent)
           )
           .addTo(map);
 
-        currentMarkers.set(project.id, marker);
+        currentMarkers.set(trip.id, marker);
       } else {
-        marker.setLngLat([project.longitude, project.latitude]);
+        marker.setLngLat([trip.longitude, trip.latitude]);
       }
     });
-  }, [projects, handleProjectClick]);
+  }, [trips, handleTripClick, selectedId]);
 
-  // Highlight selected marker
+  // Highlight selected marker and fly to it
   useEffect(() => {
+    const map = mapRef.current;
     markersRef.current.forEach((marker, id) => {
       const el = marker.getElement();
       if (id === selectedId) {
-        el.style.backgroundColor = '#FFFFFF';
-        el.style.borderColor = '#FF6B00';
-        el.style.transform = 'scale(1.3)';
+        el.style.transform = 'scale(1.5)';
+        el.style.zIndex = '100';
+        // Fly to selected trip
+        if (map) {
+          const trip = trips.find((t) => t.id === id);
+          if (trip) {
+            map.flyTo({
+              center: [trip.longitude, trip.latitude],
+              zoom: Math.max(map.getZoom(), 10),
+              duration: 1000,
+            });
+          }
+        }
       } else {
-        el.style.backgroundColor = '#FF6B00';
-        el.style.borderColor = 'white';
         el.style.transform = 'scale(1)';
+        el.style.zIndex = '1';
       }
     });
-  }, [selectedId]);
+  }, [selectedId, trips]);
 
   return (
-    <div className={classes.container}>
-      <div ref={mapContainerRef} className={classes.map} />
+    <div className={classes['container']}>
+      <div ref={mapContainerRef} className={classes['map']} />
+      <div className={classes['clickHint']}>Click anywhere on the map to add a new fishing trip</div>
     </div>
   );
 }

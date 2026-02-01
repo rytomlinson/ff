@@ -1,16 +1,16 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { projectReducer } from './slices/projectSlice.js';
+import { fishingTripReducer } from './slices/fishingTripSlice.js';
 
 export const store = configureStore({
   reducer: {
-    project: projectReducer,
+    fishingTrip: fishingTripReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
         // Ignore date serialization warnings for createdAt/updatedAt
-        ignoredActions: ['project/setItems', 'project/upsertItem'],
-        ignoredPaths: ['project.items'],
+        ignoredActions: ['fishingTrip/setItems', 'fishingTrip/upsertItem'],
+        ignoredPaths: ['fishingTrip.items'],
       },
     }),
 });

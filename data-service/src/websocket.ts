@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
-import { subscribeToProjectEvents } from './rabbit/rabbitClient.js';
+import { subscribeToFishingTripEvents } from './rabbit/rabbitClient.js';
 
 let wss: WebSocketServer | null = null;
 
@@ -34,7 +34,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
   });
 
   // Subscribe to RabbitMQ events and broadcast to WebSocket clients
-  subscribeToProjectEvents('project.*', (routingKey, data) => {
+  subscribeToFishingTripEvents('fishingTrip.*', (routingKey: string, data: unknown) => {
     broadcast({
       type: routingKey,
       data,

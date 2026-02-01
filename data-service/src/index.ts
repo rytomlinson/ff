@@ -3,7 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import * as trpcExpress from '@trpc/server/adapters/express';
 import { router, createContext } from './trpc.js';
-import { projectRouter } from './trpcRouters/projectRouter.js';
+import { fishingTripRouter } from './trpcRouters/fishingTripRouter.js';
 import { connectRabbitMQ, closeRabbitMQ } from './rabbit/rabbitClient.js';
 import { setupWebSocket } from './websocket.js';
 
@@ -12,7 +12,7 @@ const PORT = process.env['PORT'] ?? 4001;
 
 // Create the appRouter by merging all routers
 export const appRouter = router({
-  project: projectRouter,
+  fishingTrip: fishingTripRouter,
 });
 
 export type AppRouter = typeof appRouter;
