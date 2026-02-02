@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import * as trpcExpress from '@trpc/server/adapters/express';
 import { router, createContext } from './trpc.js';
 import { fishingTripRouter } from './trpcRouters/fishingTripRouter.js';
+import { tripEventRouter } from './trpcRouters/tripEventRouter.js';
 import { connectRabbitMQ, closeRabbitMQ } from './rabbit/rabbitClient.js';
 import { setupWebSocket } from './websocket.js';
 
@@ -13,6 +14,7 @@ const PORT = process.env['PORT'] ?? 4001;
 // Create the appRouter by merging all routers
 export const appRouter = router({
   fishingTrip: fishingTripRouter,
+  tripEvent: tripEventRouter,
 });
 
 export type AppRouter = typeof appRouter;
