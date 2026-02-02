@@ -9,6 +9,7 @@ export interface FishingTripState {
   error: string | null;
   formOpen: boolean;
   pendingCoordinates: { lat: number; lng: number } | null;
+  pendingLocationName: string | null;
 }
 
 const initialState: FishingTripState = {
@@ -18,6 +19,7 @@ const initialState: FishingTripState = {
   error: null,
   formOpen: false,
   pendingCoordinates: null,
+  pendingLocationName: null,
 };
 
 const fishingTripSlice = createSlice({
@@ -48,15 +50,19 @@ const fishingTripSlice = createSlice({
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
     },
-    openForm: (state, action: PayloadAction<{ lat?: number; lng?: number } | undefined>) => {
+    openForm: (state, action: PayloadAction<{ lat?: number; lng?: number; locationName?: string } | undefined>) => {
       state.formOpen = true;
       if (action.payload?.lat !== undefined && action.payload?.lng !== undefined) {
         state.pendingCoordinates = { lat: action.payload.lat, lng: action.payload.lng };
+      }
+      if (action.payload?.locationName) {
+        state.pendingLocationName = action.payload.locationName;
       }
     },
     closeForm: (state) => {
       state.formOpen = false;
       state.pendingCoordinates = null;
+      state.pendingLocationName = null;
     },
     reset: () => initialState,
   },
@@ -70,6 +76,7 @@ const primitiveSelectors = {
   selectError: (state: RootState) => state.fishingTrip.error,
   selectFormOpen: (state: RootState) => state.fishingTrip.formOpen,
   selectPendingCoordinates: (state: RootState) => state.fishingTrip.pendingCoordinates,
+  selectPendingLocationName: (state: RootState) => state.fishingTrip.pendingLocationName,
 };
 
 // Derived selectors

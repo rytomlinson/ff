@@ -186,6 +186,7 @@ export default function TripForm() {
   const dispatch = useAppDispatch();
   const formOpen = useAppSelector(fishingTripSelectors.selectFormOpen);
   const pendingCoordinates = useAppSelector(fishingTripSelectors.selectPendingCoordinates);
+  const pendingLocationName = useAppSelector(fishingTripSelectors.selectPendingLocationName);
 
   const [date, setDate] = useState('');
   const [locationName, setLocationName] = useState('');
@@ -216,6 +217,12 @@ export default function TripForm() {
       setLongitude(pendingCoordinates.lng.toFixed(6));
     }
   }, [pendingCoordinates]);
+
+  useEffect(() => {
+    if (pendingLocationName) {
+      setLocationName(pendingLocationName);
+    }
+  }, [pendingLocationName]);
 
   useEffect(() => {
     if (formOpen) {

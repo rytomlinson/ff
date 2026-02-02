@@ -1,5 +1,5 @@
-import { useRef, useEffect, useCallback } from 'react';
-import maplibregl, { type Map as MapLibreMap, type MapMouseEvent } from 'maplibre-gl';
+import { useRef, useEffect, useCallback, useState } from 'react';
+import maplibregl, { type Map as MapLibreMap, type MapMouseEvent, type MapGeoJSONFeature } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { createUseStyles } from 'react-jss';
 import type { PathTheme } from '../../utils/theme.js';
@@ -31,6 +31,21 @@ const useStyles = createUseStyles<string, object, PathTheme>((theme) => ({
     zIndex: 1,
     pointerEvents: 'none',
   },
+  waterName: {
+    position: 'absolute',
+    bottom: theme.spacing.md,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    backgroundColor: theme.colors.accent.primary,
+    color: '#fff',
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    borderRadius: theme.borderRadius.md,
+    fontSize: theme.fontSize.md,
+    fontWeight: 500,
+    zIndex: 1,
+    pointerEvents: 'none',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+  },
 }));
 
 interface MapProps {
@@ -42,9 +57,24 @@ interface MapProps {
 // Free OpenStreetMap-based style (no API key required)
 const STYLE_URL = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
+// Water layer IDs in Carto Positron style
+const WATER_LAYERS = ['water', 'waterway'];
+
+// Highlight color for water features
+const WATER_HIGHLIGHT_COLOR = '#4A7C8A';
+const WATER_HOVER_COLOR = '#5FA3B5';
+
 function formatDate(date: Date | string): string {
   const d = new Date(date);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function getWaterFeatureName(feature: MapGeoJSONFeature): string | null {
+  const props = feature.properties;
+  if (!props) return null;
+
+  // Try various name properties that might exist
+  return props['name'] || props['name_en'] || props['water'] || props['waterway'] || null;
 }
 
 export default function Map({
@@ -56,16 +86,34 @@ export default function Map({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<globalThis.Map<string, maplibregl.Marker>>(new globalThis.Map());
+  const hoveredFeatureRef = useRef<string | number | null>(null);
+
+  const [hoveredWaterName, setHoveredWaterName] = useState<string | null>(null);
 
   const dispatch = useAppDispatch();
   const trips = useAppSelector(fishingTripSelectors.selectItemsArray);
   const selectedId = useAppSelector(fishingTripSelectors.selectSelectedId);
 
-  const handleMapClick = useCallback(
+  const handleWaterClick = useCallback(
     (e: MapMouseEvent) => {
-      // Open form with clicked coordinates
-      dispatch(fishingTripActions.openForm({ lat: e.lngLat.lat, lng: e.lngLat.lng }));
-      onMapClick?.(e.lngLat.lng, e.lngLat.lat);
+      const map = mapRef.current;
+      if (!map) return;
+
+      // Query for water features at click point
+      const features = map.queryRenderedFeatures(e.point, { layers: WATER_LAYERS });
+
+      if (features.length > 0) {
+        const feature = features[0];
+        const waterName = getWaterFeatureName(feature) || 'Unknown Water';
+
+        // Open form with clicked coordinates and water name
+        dispatch(fishingTripActions.openForm({
+          lat: e.lngLat.lat,
+          lng: e.lngLat.lng,
+          locationName: waterName,
+        }));
+        onMapClick?.(e.lngLat.lng, e.lngLat.lat);
+      }
     },
     [onMapClick, dispatch]
   );
@@ -91,7 +139,78 @@ export default function Map({
     map.addControl(new maplibregl.NavigationControl({}), 'top-right');
     map.addControl(new maplibregl.ScaleControl({}), 'bottom-right');
 
-    map.on('click', handleMapClick);
+    // Wait for style to load before adding water interactivity
+    map.on('load', () => {
+      // Add a highlight layer for water on hover
+      map.addSource('water-highlight', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+
+      map.addLayer({
+        id: 'water-highlight-fill',
+        type: 'fill',
+        source: 'water-highlight',
+        paint: {
+          'fill-color': WATER_HOVER_COLOR,
+          'fill-opacity': 0.4,
+        },
+      });
+
+      map.addLayer({
+        id: 'water-highlight-line',
+        type: 'line',
+        source: 'water-highlight',
+        paint: {
+          'line-color': WATER_HIGHLIGHT_COLOR,
+          'line-width': 2,
+        },
+      });
+
+      // Handle mouse move over water features
+      const handleMouseMove = (e: MapMouseEvent) => {
+        const features = map.queryRenderedFeatures(e.point, { layers: WATER_LAYERS });
+        const feature = features[0];
+
+        if (feature) {
+          map.getCanvas().style.cursor = 'pointer';
+
+          const featureId = feature.id ?? JSON.stringify(feature.geometry).slice(0, 50);
+
+          // Only update if we're hovering over a different feature
+          if (hoveredFeatureRef.current !== featureId) {
+            hoveredFeatureRef.current = featureId;
+
+            // Update highlight
+            const source = map.getSource('water-highlight') as maplibregl.GeoJSONSource | undefined;
+            if (source) {
+              source.setData({
+                type: 'FeatureCollection',
+                features: [feature as unknown as GeoJSON.Feature],
+              });
+            }
+
+            // Update water name display
+            const name = getWaterFeatureName(feature);
+            setHoveredWaterName(name);
+          }
+        } else {
+          map.getCanvas().style.cursor = '';
+          hoveredFeatureRef.current = null;
+
+          // Clear highlight
+          const source = map.getSource('water-highlight') as maplibregl.GeoJSONSource | undefined;
+          if (source) {
+            source.setData({ type: 'FeatureCollection', features: [] });
+          }
+
+          setHoveredWaterName(null);
+        }
+      };
+
+      map.on('mousemove', handleMouseMove);
+      map.on('click', handleWaterClick);
+    });
 
     mapRef.current = map;
 
@@ -99,7 +218,7 @@ export default function Map({
       map.remove();
       mapRef.current = null;
     };
-  }, [initialCenter, initialZoom, handleMapClick]);
+  }, [initialCenter, initialZoom, handleWaterClick]);
 
   // Update markers when trips change
   useEffect(() => {
@@ -201,7 +320,12 @@ export default function Map({
   return (
     <div className={classes['container']}>
       <div ref={mapContainerRef} className={classes['map']} />
-      <div className={classes['clickHint']}>Click anywhere on the map to add a new fishing trip</div>
+      <div className={classes['clickHint']}>
+        Click on a lake, river, or stream to log a fishing trip
+      </div>
+      {hoveredWaterName && (
+        <div className={classes['waterName']}>{hoveredWaterName}</div>
+      )}
     </div>
   );
 }
