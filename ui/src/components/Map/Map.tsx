@@ -78,7 +78,7 @@ function getWaterFeatureName(feature: MapGeoJSONFeature): string | null {
 }
 
 export default function Map({
-  initialCenter = [-105.0, 39.5],
+  initialCenter = [-120.79501231792234, 44.11295410711017],
   initialZoom = 7,
   onMapClick,
 }: MapProps) {
@@ -86,37 +86,16 @@ export default function Map({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<globalThis.Map<string, maplibregl.Marker>>(new globalThis.Map());
-  const hoveredFeatureRef = useRef<string | number | null>(null);
+
+  // Use refs for callbacks to avoid re-initializing the map
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
 
   const [hoveredWaterName, setHoveredWaterName] = useState<string | null>(null);
 
   const dispatch = useAppDispatch();
   const trips = useAppSelector(fishingTripSelectors.selectItemsArray);
   const selectedId = useAppSelector(fishingTripSelectors.selectSelectedId);
-
-  const handleWaterClick = useCallback(
-    (e: MapMouseEvent) => {
-      const map = mapRef.current;
-      if (!map) return;
-
-      // Query for water features at click point
-      const features = map.queryRenderedFeatures(e.point, { layers: WATER_LAYERS });
-
-      if (features.length > 0) {
-        const feature = features[0];
-        const waterName = getWaterFeatureName(feature) || 'Unknown Water';
-
-        // Open form with clicked coordinates and water name
-        dispatch(fishingTripActions.openForm({
-          lat: e.lngLat.lat,
-          lng: e.lngLat.lng,
-          locationName: waterName,
-        }));
-        onMapClick?.(e.lngLat.lng, e.lngLat.lat);
-      }
-    },
-    [onMapClick, dispatch]
-  );
 
   const handleTripClick = useCallback(
     (tripId: string) => {
@@ -125,7 +104,7 @@ export default function Map({
     [dispatch]
   );
 
-  // Initialize map
+  // Initialize map - only run once
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
@@ -141,75 +120,116 @@ export default function Map({
 
     // Wait for style to load before adding water interactivity
     map.on('load', () => {
-      // Add a highlight layer for water on hover
-      map.addSource('water-highlight', {
+      // Add highlight layers for water on hover
+      // Polygon source for lakes/water bodies
+      map.addSource('water-highlight-polygon', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
 
+      // Line source for rivers/streams
+      map.addSource('water-highlight-line', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+
+      // Fill layer for polygon water bodies
       map.addLayer({
         id: 'water-highlight-fill',
         type: 'fill',
-        source: 'water-highlight',
+        source: 'water-highlight-polygon',
         paint: {
           'fill-color': WATER_HOVER_COLOR,
           'fill-opacity': 0.4,
         },
       });
 
+      // Outline for polygon water bodies
       map.addLayer({
-        id: 'water-highlight-line',
+        id: 'water-highlight-polygon-outline',
         type: 'line',
-        source: 'water-highlight',
+        source: 'water-highlight-polygon',
         paint: {
           'line-color': WATER_HIGHLIGHT_COLOR,
           'line-width': 2,
         },
       });
 
+      // Thick line for rivers/streams
+      map.addLayer({
+        id: 'water-highlight-river',
+        type: 'line',
+        source: 'water-highlight-line',
+        paint: {
+          'line-color': WATER_HOVER_COLOR,
+          'line-width': 6,
+          'line-opacity': 0.7,
+        },
+      });
+
       // Handle mouse move over water features
-      const handleMouseMove = (e: MapMouseEvent) => {
+      map.on('mousemove', (e: MapMouseEvent) => {
         const features = map.queryRenderedFeatures(e.point, { layers: WATER_LAYERS });
         const feature = features[0];
+
+        const polygonSource = map.getSource('water-highlight-polygon') as maplibregl.GeoJSONSource | undefined;
+        const lineSource = map.getSource('water-highlight-line') as maplibregl.GeoJSONSource | undefined;
 
         if (feature) {
           map.getCanvas().style.cursor = 'pointer';
 
-          const featureId = feature.id ?? JSON.stringify(feature.geometry).slice(0, 50);
+          const geomType = feature.geometry.type;
+          const isLine = geomType === 'LineString' || geomType === 'MultiLineString';
+          const isPolygon = geomType === 'Polygon' || geomType === 'MultiPolygon';
 
-          // Only update if we're hovering over a different feature
-          if (hoveredFeatureRef.current !== featureId) {
-            hoveredFeatureRef.current = featureId;
-
-            // Update highlight
-            const source = map.getSource('water-highlight') as maplibregl.GeoJSONSource | undefined;
-            if (source) {
-              source.setData({
-                type: 'FeatureCollection',
-                features: [feature as unknown as GeoJSON.Feature],
-              });
-            }
-
-            // Update water name display
-            const name = getWaterFeatureName(feature);
-            setHoveredWaterName(name);
+          // Update appropriate highlight source based on geometry type
+          if (isPolygon && polygonSource) {
+            polygonSource.setData({
+              type: 'FeatureCollection',
+              features: [feature as unknown as GeoJSON.Feature],
+            });
+            lineSource?.setData({ type: 'FeatureCollection', features: [] });
+          } else if (isLine && lineSource) {
+            lineSource.setData({
+              type: 'FeatureCollection',
+              features: [feature as unknown as GeoJSON.Feature],
+            });
+            polygonSource?.setData({ type: 'FeatureCollection', features: [] });
           }
+
+          // Update water name display
+          const name = getWaterFeatureName(feature);
+          setHoveredWaterName(name);
         } else {
           map.getCanvas().style.cursor = '';
-          hoveredFeatureRef.current = null;
 
-          // Clear highlight
-          const source = map.getSource('water-highlight') as maplibregl.GeoJSONSource | undefined;
-          if (source) {
-            source.setData({ type: 'FeatureCollection', features: [] });
-          }
+          // Clear both highlights
+          polygonSource?.setData({ type: 'FeatureCollection', features: [] });
+          lineSource?.setData({ type: 'FeatureCollection', features: [] });
 
           setHoveredWaterName(null);
         }
-      };
+      });
 
-      map.on('mousemove', handleMouseMove);
-      map.on('click', handleWaterClick);
+      // Handle click on water features
+      map.on('click', (e: MapMouseEvent) => {
+        const features = map.queryRenderedFeatures(e.point, { layers: WATER_LAYERS });
+
+        if (features.length > 0) {
+          const feature = features[0];
+          if (feature) {
+            const waterName = getWaterFeatureName(feature) || 'Unknown Water';
+
+            // Open form with clicked coordinates and water name
+            dispatch(fishingTripActions.openForm({
+              lat: e.lngLat.lat,
+              lng: e.lngLat.lng,
+              locationName: waterName,
+            }));
+            onMapClickRef.current?.(e.lngLat.lng, e.lngLat.lat);
+          }
+        }
+      });
     });
 
     mapRef.current = map;
@@ -218,7 +238,8 @@ export default function Map({
       map.remove();
       mapRef.current = null;
     };
-  }, [initialCenter, initialZoom, handleWaterClick]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only initialize once
 
   // Update markers when trips change
   useEffect(() => {
@@ -241,23 +262,27 @@ export default function Map({
       let marker = currentMarkers.get(trip.id);
 
       if (!marker) {
-        // Create fish-themed marker
+        // Create fish-themed marker with inner element for animation
+        // (MapLibre uses transform on outer element for positioning)
         const el = document.createElement('div');
         el.className = 'fishing-trip-marker';
-        el.innerHTML = '🐟';
-        el.style.cssText = `
+
+        const inner = document.createElement('span');
+        inner.innerHTML = '🐟';
+        inner.style.cssText = `
           font-size: 24px;
+          display: block;
           cursor: pointer;
           transition: transform 0.2s ease;
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
         `;
+        el.appendChild(inner);
+
         el.addEventListener('mouseenter', () => {
-          el.style.transform = 'scale(1.3)';
+          inner.style.transform = 'scale(1.3)';
         });
         el.addEventListener('mouseleave', () => {
-          if (trip.id !== selectedId) {
-            el.style.transform = 'scale(1)';
-          }
+          inner.style.transform = 'scale(1)';
         });
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -291,31 +316,20 @@ export default function Map({
     });
   }, [trips, handleTripClick, selectedId]);
 
-  // Highlight selected marker and fly to it
+  // Highlight selected marker (without flying - that was causing jumps)
   useEffect(() => {
-    const map = mapRef.current;
     markersRef.current.forEach((marker, id) => {
       const el = marker.getElement();
+      const inner = el.querySelector('span') as HTMLElement | null;
       if (id === selectedId) {
-        el.style.transform = 'scale(1.5)';
+        if (inner) inner.style.transform = 'scale(1.5)';
         el.style.zIndex = '100';
-        // Fly to selected trip
-        if (map) {
-          const trip = trips.find((t) => t.id === id);
-          if (trip) {
-            map.flyTo({
-              center: [trip.longitude, trip.latitude],
-              zoom: Math.max(map.getZoom(), 10),
-              duration: 1000,
-            });
-          }
-        }
       } else {
-        el.style.transform = 'scale(1)';
+        if (inner) inner.style.transform = 'scale(1)';
         el.style.zIndex = '1';
       }
     });
-  }, [selectedId, trips]);
+  }, [selectedId]);
 
   return (
     <div className={classes['container']}>

@@ -3,6 +3,7 @@ import { lightTheme, type PathTheme } from './utils/theme.js';
 import Map from './components/Map/Map.js';
 import TripList from './components/TripList/TripList.js';
 import TripForm from './components/TripForm/TripForm.js';
+import TripDetail from './components/TripDetail/TripDetail.js';
 import { useWebSocket } from './hooks/index.js';
 
 const useStyles = createUseStyles<string, object, PathTheme>((theme) => ({
@@ -66,6 +67,7 @@ function AppContent() {
         <Map onMapClick={handleMapClick} />
       </div>
       <TripForm />
+      <TripDetail />
     </div>
   );
 }

@@ -1,25 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createUseStyles } from 'react-jss';
 import type { PathTheme } from '../../utils/theme.js';
 import { useAppSelector, useAppDispatch } from '../../hooks/index.js';
 import { fishingTripSelectors, fishingTripActions } from '../../slices/fishingTripSlice.js';
 import { trpc } from '../../trpc.js';
 import type { FishingTrip } from '@ff/common/schemas/fishingTripSchema.js';
-
-// API returns dates as strings, not Date objects
-interface FishingTripApiResponse {
-  id: string;
-  date: string;
-  locationName: string;
-  latitude: number;
-  longitude: number;
-  waterConditions: 'clear' | 'murky' | 'stained' | 'muddy' | null;
-  weather: 'sunny' | 'cloudy' | 'overcast' | 'rainy' | 'stormy' | null;
-  notes: string | null;
-  catchCount: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
 
 const useStyles = createUseStyles<string, object, PathTheme>((theme) => ({
   container: {
@@ -45,7 +30,7 @@ const useStyles = createUseStyles<string, object, PathTheme>((theme) => ({
   },
   addButton: {
     backgroundColor: theme.colors.accent.primary,
-    color: theme.colors.text.primary,
+    color: '#fff',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
@@ -62,64 +47,87 @@ const useStyles = createUseStyles<string, object, PathTheme>((theme) => ({
     overflow: 'auto',
     padding: theme.spacing.sm,
   },
-  item: {
-    padding: theme.spacing.md,
+  locationGroup: {
     marginBottom: theme.spacing.sm,
     backgroundColor: theme.colors.background.tertiary,
     borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-    transition: `all ${theme.transitions.fast}`,
     border: `1px solid transparent`,
-    '&:hover': {
-      borderColor: theme.colors.border.secondary,
-    },
+    overflow: 'hidden',
+    transition: `all ${theme.transitions.fast}`,
   },
-  itemSelected: {
-    borderColor: theme.colors.accent.primary,
-    backgroundColor: theme.colors.background.primary,
-  },
-  itemHeader: {
+  locationHeader: {
+    padding: theme.spacing.md,
+    cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    marginBottom: theme.spacing.xs,
     gap: theme.spacing.sm,
+    '&:hover': {
+      backgroundColor: theme.colors.background.primary,
+    },
   },
-  itemIcon: {
-    fontSize: theme.fontSize.lg,
+  expandIcon: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.text.muted,
+    transition: `transform ${theme.transitions.fast}`,
+    width: 16,
   },
-  itemDate: {
+  expandIconOpen: {
+    transform: 'rotate(90deg)',
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  locationName: {
     color: theme.colors.text.primary,
     fontSize: theme.fontSize.md,
     fontWeight: 500,
+    marginBottom: theme.spacing.xs,
   },
-  itemLocation: {
-    color: theme.colors.text.secondary,
-    fontSize: theme.fontSize.sm,
-    marginBottom: theme.spacing.sm,
-  },
-  itemMeta: {
+  locationStats: {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  catchCount: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: theme.spacing.md,
     color: theme.colors.text.muted,
     fontSize: theme.fontSize.sm,
   },
-  catchIcon: {
-    fontSize: theme.fontSize.md,
+  stat: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
-  weatherBadge: {
-    padding: `${theme.spacing.xs / 2}px ${theme.spacing.sm}px`,
-    borderRadius: theme.borderRadius.sm,
-    fontSize: theme.fontSize.xs,
-    fontWeight: 500,
-    textTransform: 'capitalize',
-    backgroundColor: `${theme.colors.accent.primary}22`,
-    color: theme.colors.accent.primary,
+  tripsList: {
+    borderTop: `1px solid ${theme.colors.border.primary}`,
+    backgroundColor: theme.colors.background.primary,
+  },
+  tripItem: {
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    paddingLeft: theme.spacing.xl,
+    cursor: 'pointer',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottom: `1px solid ${theme.colors.border.primary}`,
+    transition: `all ${theme.transitions.fast}`,
+    '&:hover': {
+      backgroundColor: theme.colors.background.tertiary,
+    },
+    '&:last-child': {
+      borderBottom: 'none',
+    },
+  },
+  tripItemSelected: {
+    backgroundColor: theme.colors.background.tertiary,
+    borderLeft: `3px solid ${theme.colors.accent.primary}`,
+  },
+  tripDate: {
+    color: theme.colors.text.secondary,
+    fontSize: theme.fontSize.sm,
+  },
+  tripCatch: {
+    color: theme.colors.text.muted,
+    fontSize: theme.fontSize.sm,
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   loading: {
     display: 'flex',
@@ -140,8 +148,26 @@ const useStyles = createUseStyles<string, object, PathTheme>((theme) => ({
   },
 }));
 
-interface TripListProps {
-  onTripSelect?: (trip: FishingTrip) => void;
+// API returns dates as strings
+interface FishingTripApiResponse {
+  id: string;
+  date: string;
+  locationName: string;
+  latitude: number;
+  longitude: number;
+  waterConditions: 'clear' | 'murky' | 'stained' | 'muddy' | null;
+  weather: 'sunny' | 'cloudy' | 'overcast' | 'rainy' | 'stormy' | null;
+  notes: string | null;
+  catchCount: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface LocationGroup {
+  locationName: string;
+  trips: FishingTrip[];
+  totalTrips: number;
+  totalFish: number;
 }
 
 function formatDate(date: Date | string): string {
@@ -149,13 +175,37 @@ function formatDate(date: Date | string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function TripList({ onTripSelect }: TripListProps) {
+function groupTripsByLocation(trips: FishingTrip[]): LocationGroup[] {
+  const groups = new globalThis.Map<string, FishingTrip[]>();
+
+  for (const trip of trips) {
+    const existing = groups.get(trip.locationName) || [];
+    existing.push(trip);
+    groups.set(trip.locationName, existing);
+  }
+
+  return Array.from(groups.entries()).map(([locationName, locationTrips]) => ({
+    locationName,
+    trips: locationTrips.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    totalTrips: locationTrips.length,
+    totalFish: locationTrips.reduce((sum, t) => sum + (t.catchCount ?? 0), 0),
+  })).sort((a, b) => {
+    // Sort by most recent trip date
+    const aLatest = new Date(a.trips[0]?.date ?? 0).getTime();
+    const bLatest = new Date(b.trips[0]?.date ?? 0).getTime();
+    return bLatest - aLatest;
+  });
+}
+
+export default function TripList() {
   const classes = useStyles();
   const dispatch = useAppDispatch();
   const trips = useAppSelector(fishingTripSelectors.selectItemsArray);
   const selectedId = useAppSelector(fishingTripSelectors.selectSelectedId);
   const loading = useAppSelector(fishingTripSelectors.selectLoading);
   const error = useAppSelector(fishingTripSelectors.selectError);
+
+  const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
 
   const { data, isLoading, error: queryError } = trpc.fishingTrip.list.useQuery();
 
@@ -171,7 +221,6 @@ export default function TripList({ onTripSelect }: TripListProps) {
 
   useEffect(() => {
     if (data) {
-      // Convert date strings to Date objects
       const tripsWithDates = (data as FishingTripApiResponse[]).map((trip) => ({
         ...trip,
         date: new Date(trip.date),
@@ -182,20 +231,34 @@ export default function TripList({ onTripSelect }: TripListProps) {
     }
   }, [data, dispatch]);
 
-  const handleItemClick = (trip: FishingTrip) => {
+  const toggleLocation = (locationName: string) => {
+    setExpandedLocations((prev) => {
+      const next = new Set(prev);
+      if (next.has(locationName)) {
+        next.delete(locationName);
+      } else {
+        next.add(locationName);
+      }
+      return next;
+    });
+  };
+
+  const handleTripClick = (trip: FishingTrip) => {
     dispatch(fishingTripActions.setSelectedId(trip.id));
-    onTripSelect?.(trip);
   };
 
   const handleNewTrip = () => {
     dispatch(fishingTripActions.openForm());
   };
 
+  const locationGroups = groupTripsByLocation(trips);
+  const totalTrips = trips.length;
+
   if (loading) {
     return (
       <div className={classes['container']}>
         <div className={classes['header']}>
-          <h2 className={classes['title']}>Fishing Trips</h2>
+          <h2 className={classes['title']}>Fishing Spots</h2>
         </div>
         <div className={classes['loading']}>Loading trips...</div>
       </div>
@@ -206,7 +269,7 @@ export default function TripList({ onTripSelect }: TripListProps) {
     return (
       <div className={classes['container']}>
         <div className={classes['header']}>
-          <h2 className={classes['title']}>Fishing Trips</h2>
+          <h2 className={classes['title']}>Fishing Spots</h2>
         </div>
         <div className={classes['error']}>{error}</div>
       </div>
@@ -216,39 +279,59 @@ export default function TripList({ onTripSelect }: TripListProps) {
   return (
     <div className={classes['container']}>
       <div className={classes['header']}>
-        <h2 className={classes['title']}>Trips ({trips.length})</h2>
+        <h2 className={classes['title']}>
+          {locationGroups.length} Spot{locationGroups.length !== 1 ? 's' : ''} · {totalTrips} Trip{totalTrips !== 1 ? 's' : ''}
+        </h2>
         <button className={classes['addButton']} onClick={handleNewTrip}>
           + New Trip
         </button>
       </div>
       <div className={classes['list']}>
-        {trips.length === 0 ? (
-          <div className={classes['empty']}>No fishing trips yet. Click "New Trip" to add one!</div>
+        {locationGroups.length === 0 ? (
+          <div className={classes['empty']}>No fishing trips yet. Click "New Trip" or click on a body of water on the map!</div>
         ) : (
-          trips.map((trip) => (
-            <div
-              key={trip.id}
-              className={`${classes['item']} ${
-                selectedId === trip.id ? classes['itemSelected'] : ''
-              }`}
-              onClick={() => handleItemClick(trip)}
-            >
-              <div className={classes['itemHeader']}>
-                <span className={classes['itemIcon']}>🎣</span>
-                <span className={classes['itemDate']}>{formatDate(trip.date)}</span>
-              </div>
-              <div className={classes['itemLocation']}>{trip.locationName}</div>
-              <div className={classes['itemMeta']}>
-                <span className={classes['catchCount']}>
-                  <span className={classes['catchIcon']}>🐟</span>
-                  {trip.catchCount ?? 0} fish
-                </span>
-                {trip.weather && (
-                  <span className={classes['weatherBadge']}>{trip.weather}</span>
+          locationGroups.map((group) => {
+            const isExpanded = expandedLocations.has(group.locationName);
+            return (
+              <div key={group.locationName} className={classes['locationGroup']}>
+                <div
+                  className={classes['locationHeader']}
+                  onClick={() => toggleLocation(group.locationName)}
+                >
+                  <span className={`${classes['expandIcon']} ${isExpanded ? classes['expandIconOpen'] : ''}`}>
+                    ▶
+                  </span>
+                  <div className={classes['locationInfo']}>
+                    <div className={classes['locationName']}>{group.locationName}</div>
+                    <div className={classes['locationStats']}>
+                      <span className={classes['stat']}>
+                        🎣 {group.totalTrips} trip{group.totalTrips !== 1 ? 's' : ''}
+                      </span>
+                      <span className={classes['stat']}>
+                        🐟 {group.totalFish} fish
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {isExpanded && (
+                  <div className={classes['tripsList']}>
+                    {group.trips.map((trip) => (
+                      <div
+                        key={trip.id}
+                        className={`${classes['tripItem']} ${selectedId === trip.id ? classes['tripItemSelected'] : ''}`}
+                        onClick={() => handleTripClick(trip)}
+                      >
+                        <span className={classes['tripDate']}>{formatDate(trip.date)}</span>
+                        <span className={classes['tripCatch']}>
+                          🐟 {trip.catchCount ?? 0}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
